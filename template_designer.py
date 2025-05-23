@@ -22,7 +22,7 @@ def render_template_designer(current_user):
     if "node_data_list" not in st.session_state:
         st.session_state.node_data_list = []
 
-    # 添加节点按钮
+    # 新增节点按钮
     if st.button("➕ 新增节点"):
         node_count = len(st.session_state.node_data_list) + 1
         st.session_state.node_data_list.append({
@@ -34,8 +34,8 @@ def render_template_designer(current_user):
     # 展示所有节点
     remove_node_indexes = []
     for i, node in enumerate(st.session_state.node_data_list):
-        # 并排显示节点名称和删除按钮
-        node_col1, node_col2 = st.columns([8, 1])
+        # 节点名称和删除按钮同行显示
+        node_col1, node_col2 = st.columns([6, 1])
         with node_col1:
             node['name'] = st.text_input(
                 "节点名称",
@@ -43,6 +43,7 @@ def render_template_designer(current_user):
                 key=f"node_name_{i}"
             )
         with node_col2:
+            st.markdown("<br>", unsafe_allow_html=True)  # 保证按钮垂直居中
             if st.button("❌", key=f"del_node_{i}"):
                 remove_node_indexes.append(i)
         with st.expander(node['name'], expanded=True):
@@ -73,7 +74,7 @@ def render_template_designer(current_user):
                     if st.button("删除字段", key=f"del_field_{i}_{j}"):
                         remove_field_indexes.append(j)
 
-                # 第二行：字段类型 + 默认值 + 可选项（仅select类型显示）
+                # 第二行：字段类型 + 默认值 + 可选项(仅select类型显示)
                 col4, col5, col6 = st.columns([2, 2, 3])
                 with col4:
                     ftype = st.selectbox(
@@ -97,13 +98,13 @@ def render_template_designer(current_user):
                     "options": options if ftype == "select" else ""
                 }
 
-            # 删除多余字段（防止索引错乱，倒序删）
+            # 删除多余字段（倒序删防止索引混乱）
             for idx in sorted(remove_field_indexes, reverse=True):
                 st.session_state[f"fields_{i}"].pop(idx)
 
             node["fields"] = st.session_state[f"fields_{i}"]
 
-    # 删除多余节点（倒序删除防止索引错乱）
+    # 删除多余节点（倒序删防止索引混乱）
     for idx in sorted(remove_node_indexes, reverse=True):
         st.session_state.node_data_list.pop(idx)
         st.session_state.pop(f"fields_{idx}", None)
