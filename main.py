@@ -13,6 +13,25 @@ Session = sessionmaker(bind=engine)
 session = Session()
 Base.metadata.create_all(engine)
 
+# ✅ 用户权限配置
+USER_DB = {
+    "admin_user": {"level": "admin", "groups": ["市场部", "技术部", "行政部"]},
+    "agent_1":    {"level": "agent", "groups": ["技术部"]},
+    "viewer_1":   {"level": "viewer", "groups": ["行政部"]}
+}
+
+st.set_page_config(page_title="FlowTick 工单系统", layout="wide")
+st.title("📌 FlowTick 智能工单系统")
+
+# 登录逻辑
+with st.sidebar:
+    st.subheader("🔐 登录")
+    CURRENT_USER = st.selectbox("选择账号", list(USER_DB.keys()))
+    st.write(f"权限等级: `{USER_DB[CURRENT_USER]['level']}`")
+    st.write(f"所属群组: {', '.join(USER_DB[CURRENT_USER]['groups'])}")
+
+menu = st.sidebar.radio("导航", ["创建工单", "我的工单", "群组任务", "仪表盘"])
+
 # ✅ 自动插入默认模板与字段
 if session.query(TicketTemplate).count() == 0:
     template = TicketTemplate(name="新员工入职审批", description="标准入职流程")
@@ -35,15 +54,6 @@ if session.query(TicketTemplate).count() == 0:
         )
         session.add(field)
     session.commit()
-
-# 页面初始化
-st.set_page_config(page_title="FlowTick 工单系统", layout="wide")
-st.title("📌 FlowTick 智能工单系统")
-
-menu = st.sidebar.radio("导航", ["创建工单", "我的工单", "仪表盘"])
-
-# 模拟登录人
-CURRENT_USER = "demo_user"
 
 if menu == "创建工单":
     st.header("🎫 创建新工单")
@@ -102,7 +112,7 @@ if menu == "创建工单":
             st.json(field_data)
 
 elif menu == "我的工单":
-    st.header("🧾 我的提交记录")
+    st.header("🧾 我提交的工单")
 
     tickets = session.query(TicketInstance).filter_by(created_by=CURRENT_USER).all()
     if not tickets:
@@ -114,6 +124,35 @@ elif menu == "我的工单":
                 "工单编号": f"TKT-{t.id:04d}",
                 "标题": t.title,
                 "状态": t.status,
+                "提交人": t.created_by,
+                "提交时间": t.created_at.strftime("%Y-%m-%d %H:%M:%S")
+            })
+        st.dataframe(pd.DataFrame(data))
+
+elif menu == "群组任务":
+    st.header("👥 所属群组工单")
+
+    tickets = session.query(TicketInstance).all()
+    visible = []
+    for t in tickets:
+        steps = session.query(TicketStep).filter_by(ticket_id=t.id).order_by(TicketStep.submitted_at.desc()).all()
+        if steps:
+            latest_step = steps[0]
+            step_data = latest_step.data or {}
+            dept = step_data.get("所属部门", None)
+            if dept and dept in USER_DB[CURRENT_USER]["groups"]:
+                visible.append(t)
+
+    if not visible:
+        st.info("你所在群组没有可查看的工单")
+    else:
+        data = []
+        for t in visible:
+            data.append({
+                "工单编号": f"TKT-{t.id:04d}",
+                "标题": t.title,
+                "状态": t.status,
+                "提交人": t.created_by,
                 "提交时间": t.created_at.strftime("%Y-%m-%d %H:%M:%S")
             })
         st.dataframe(pd.DataFrame(data))
