@@ -9,38 +9,87 @@ def render_template_designer(current_user):
         st.warning("❌ 权限不足，仅管理员可访问该页面")
         return
 
-    st.header("🛠️ 工单模板设计器（最多支持 8 个流程节点）")
+    st.header("🛠️ 工单模板设计器（支持动态节点与字段）")
+
     template_name = st.text_input("模板名称")
     description = st.text_area("模板描述")
-    allowed_groups = st.multiselect("谁可以发起这个工单？", ["ALL"] + list({g for u in USER_DB.values() for g in u['groups']}))
+    allowed_groups = st.multiselect(
+        "谁可以发起这个工单？",
+        ["ALL"] + list({g for u in USER_DB.values() for g in u['groups']})
+    )
 
-    node_data = []
-    for i in range(8):
-        with st.expander(f"🧩 配置节点 node{i}", expanded=(i == 0)):
-            group = st.selectbox(f"Node{i} 接收群组", list({g for u in USER_DB.values() for g in u['groups']}), key=f"group_{i}")
-            field_count = st.number_input(f"Node{i} 字段数量", 0, 10, 1, key=f"fcount_{i}")
-            fields = []
-            for j in range(int(field_count)):
-                fname = st.text_input(f"字段{j+1} 名称", key=f"fname_{i}_{j}")
-                ftype = st.selectbox(f"字段{j+1} 类型", ["text", "number", "select", "date", "file", "textarea"], key=f"ftype_{i}_{j}")
-                is_required = st.checkbox(f"字段{j+1} 是否必填", value=True, key=f"freq_{i}_{j}")
-                options = ""
-                if ftype == "select":
-                    options = st.text_input(f"字段{j+1} 可选项（逗号分隔）", key=f"fopt_{i}_{j}")
-                fields.append({"field_name": fname, "field_type": ftype, "is_required": is_required, "options": options})
-            node_data.append({"step": i, "group": group, "fields": fields})
+    # 动态节点列表
+    if "node_data_list" not in st.session_state:
+        st.session_state.node_data_list = []
 
+    # 添加节点按钮
+    if st.button("➕ 新增节点"):
+        st.session_state.node_data_list.append({"group": "", "fields": []})
+
+    # 展示所有节点
+    for i, node in enumerate(st.session_state.node_data_list):
+        with st.expander(f"节点 {i+1}", expanded=True):
+            node["group"] = st.selectbox(
+                f"节点{i+1} 接收群组",
+                list({g for u in USER_DB.values() for g in u['groups']}),
+                key=f"group_{i}"
+            )
+
+            # 动态添加字段
+            if f"fields_{i}" not in st.session_state:
+                st.session_state[f"fields_{i}"] = []
+
+            if st.button(f"➕ 节点{i+1}新增字段", key=f"add_field_{i}"):
+                st.session_state[f"fields_{i}"].append({})
+
+            # 展示所有字段
+            for j, _ in enumerate(st.session_state[f"fields_{i}"]):
+                with st.container():
+                    fname = st.text_input(f"字段{j+1} 名称", key=f"fname_{i}_{j}")
+                    ftype = st.selectbox(
+                        f"字段{j+1} 类型",
+                        ["text", "number", "select", "date", "file", "textarea"],
+                        key=f"ftype_{i}_{j}"
+                    )
+                    is_required = st.checkbox("必填", value=True, key=f"freq_{i}_{j}")
+                    options = ""
+                    if ftype == "select":
+                        options = st.text_input("可选项（用逗号分隔）", key=f"fopt_{i}_{j}")
+                    st.session_state[f"fields_{i}"][j] = {
+                        "field_name": fname,
+                        "field_type": ftype,
+                        "is_required": is_required,
+                        "options": options
+                    }
+            node["fields"] = st.session_state[f"fields_{i}"]
+
+        # 删除节点按钮
+        if st.button(f"❌ 删除节点{i+1}", key=f"del_node_{i}"):
+            st.session_state.node_data_list.pop(i)
+            st.session_state.pop(f"fields_{i}", None)
+            st.experimental_rerun()
+
+    # 保存模板
     if st.button("保存模板"):
-        t = TicketTemplate(name=template_name, description=description, allowed_groups=",".join(allowed_groups))
+        t = TicketTemplate(
+            name=template_name,
+            description=description,
+            allowed_groups=",".join(allowed_groups)
+        )
         session.add(t)
         session.commit()
-        for node in node_data:
+        for idx, node in enumerate(st.session_state.node_data_list):
             nt = TicketNodeTemplate(
                 template_id=t.id,
-                step_order=node['step'],
+                step_order=idx,
                 group=node['group'],
                 fields_json=json.dumps(node['fields'])
             )
             session.add(nt)
         session.commit()
         st.success("✅ 模板保存成功！")
+        # 清空session状态以便下次重新设计
+        st.session_state.node_data_list = []
+        for k in list(st.session_state.keys()):
+            if k.startswith("fields_"):
+                st.session_state.pop(k)
