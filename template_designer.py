@@ -9,7 +9,7 @@ def render_template_designer(current_user):
         st.warning("❌ 权限不足，仅管理员可访问该页面")
         return
 
-    st.header("🛠️ 工单模板设计器（支持动态节点与字段）")
+    st.header("🛠️ 工单模板设计器（动态节点、字段、字段默认值、节点可重命名）")
 
     template_name = st.text_input("模板名称")
     description = st.text_area("模板描述")
@@ -24,45 +24,71 @@ def render_template_designer(current_user):
 
     # 添加节点按钮
     if st.button("➕ 新增节点"):
-        st.session_state.node_data_list.append({"group": "", "fields": []})
+        node_count = len(st.session_state.node_data_list) + 1
+        st.session_state.node_data_list.append({
+            "name": f"节点{node_count}",
+            "group": "",
+            "fields": []
+        })
 
     # 展示所有节点
+    remove_node_indexes = []
     for i, node in enumerate(st.session_state.node_data_list):
-        with st.expander(f"节点 {i+1}", expanded=True):
+        # 并排显示节点名称和删除按钮
+        node_col1, node_col2 = st.columns([8, 1])
+        with node_col1:
+            node['name'] = st.text_input(
+                "节点名称",
+                value=node.get('name', f"节点{i+1}"),
+                key=f"node_name_{i}"
+            )
+        with node_col2:
+            if st.button("❌", key=f"del_node_{i}"):
+                remove_node_indexes.append(i)
+        with st.expander(node['name'], expanded=True):
             node["group"] = st.selectbox(
-                f"节点{i+1} 接收群组",
+                f"节点接收群组",
                 list({g for u in USER_DB.values() for g in u['groups']}),
                 key=f"group_{i}"
             )
 
-            # 动态添加字段
+            # 字段列表初始化
             if f"fields_{i}" not in st.session_state:
                 st.session_state[f"fields_{i}"] = []
 
-            if st.button(f"➕ 节点{i+1}新增字段", key=f"add_field_{i}"):
+            # 新增字段按钮
+            if st.button(f"➕ 新增字段", key=f"add_field_{i}"):
                 st.session_state[f"fields_{i}"].append({})
 
-            # 展示所有字段（用columns并列布局）
+            # 字段并列排布，支持默认值
+            remove_field_indexes = []
             for j, _ in enumerate(st.session_state[f"fields_{i}"]):
-                cols = st.columns([2, 1, 1, 2, 2])  # 名称/必填 | 类型 | 默认值 | 选项 | 删除按钮
-                with cols[0]:
+                # 第一行：字段名称 + 必填 + 删除按钮
+                col1, col2, col3 = st.columns([3, 1, 1])
+                with col1:
                     fname = st.text_input(f"字段{j+1} 名称", key=f"fname_{i}_{j}")
-                with cols[1]:
+                with col2:
                     is_required = st.checkbox("必填", value=True, key=f"freq_{i}_{j}")
-                with cols[2]:
+                with col3:
+                    if st.button("删除字段", key=f"del_field_{i}_{j}"):
+                        remove_field_indexes.append(j)
+
+                # 第二行：字段类型 + 默认值 + 可选项（仅select类型显示）
+                col4, col5, col6 = st.columns([2, 2, 3])
+                with col4:
                     ftype = st.selectbox(
                         "类型",
                         ["text", "number", "select", "date", "file", "textarea"],
                         key=f"ftype_{i}_{j}"
                     )
-                with cols[3]:
+                with col5:
                     default_value = st.text_input("默认值", key=f"fdefault_{i}_{j}")
-                with cols[4]:
+                with col6:
                     options = ""
                     if ftype == "select":
-                        options = st.text_input("可选项(逗号分隔)", key=f"fopt_{i}_{j}")
+                        options = st.text_input("可选项(用逗号分隔)", key=f"fopt_{i}_{j}")
 
-                # 保存字段数据
+                # 保存字段
                 st.session_state[f"fields_{i}"][j] = {
                     "field_name": fname,
                     "field_type": ftype,
@@ -71,21 +97,24 @@ def render_template_designer(current_user):
                     "options": options if ftype == "select" else ""
                 }
 
-                # 删除字段按钮
-                if st.button("删除字段", key=f"del_field_{i}_{j}"):
-                    st.session_state[f"fields_{i}"].pop(j)
-                    st.experimental_rerun()
+            # 删除多余字段（防止索引错乱，倒序删）
+            for idx in sorted(remove_field_indexes, reverse=True):
+                st.session_state[f"fields_{i}"].pop(idx)
 
             node["fields"] = st.session_state[f"fields_{i}"]
 
-        # 删除节点按钮
-        if st.button(f"❌ 删除节点{i+1}", key=f"del_node_{i}"):
-            st.session_state.node_data_list.pop(i)
-            st.session_state.pop(f"fields_{i}", None)
-            st.experimental_rerun()
+    # 删除多余节点（倒序删除防止索引错乱）
+    for idx in sorted(remove_node_indexes, reverse=True):
+        st.session_state.node_data_list.pop(idx)
+        st.session_state.pop(f"fields_{idx}", None)
+        st.experimental_rerun()
 
     # 保存模板
     if st.button("保存模板"):
+        if not template_name or not allowed_groups or not st.session_state.node_data_list:
+            st.error("模板名、群组和至少一个节点不能为空")
+            return
+
         t = TicketTemplate(
             name=template_name,
             description=description,
@@ -98,7 +127,8 @@ def render_template_designer(current_user):
                 template_id=t.id,
                 step_order=idx,
                 group=node['group'],
-                fields_json=json.dumps(node['fields'])
+                fields_json=json.dumps(node['fields']),
+                node_name=node['name']
             )
             session.add(nt)
         session.commit()
