@@ -9,7 +9,7 @@ def render_template_designer(current_user):
         st.warning("❌ 权限不足，仅管理员可访问该页面")
         return
 
-    st.header("🛠️ 工单模板设计器（动态节点、字段、字段默认值、节点可重命名）")
+    st.header("🛠️ 工单模板设计器（动态节点、字段、字段默认值）")
 
     template_name = st.text_input("模板名称")
     description = st.text_area("模板描述")
@@ -26,20 +26,22 @@ def render_template_designer(current_user):
     if st.button("➕ 新增节点"):
         node_count = len(st.session_state.node_data_list) + 1
         st.session_state.node_data_list.append({
-            "name": f"节点{node_count}",
             "group": "",
             "fields": []
         })
 
-    # 展示所有节点
+    # 展示所有节点，并允许删除
+    remove_node_indexes = []
     for i, node in enumerate(st.session_state.node_data_list):
-        # 只显示节点名称输入框，不再有删除按钮
-        node['name'] = st.text_input(
-            "节点名称",
-            value=node.get('name', f"节点{i+1}"),
-            key=f"node_name_{i}"
-        )
-        with st.expander(node['name'], expanded=True):
+        node_name = f"节点{i+1}"
+        node_col1, node_col2 = st.columns([6, 1])
+        with node_col1:
+            st.markdown(f"**{node_name}**")
+        with node_col2:
+            st.markdown("<br>", unsafe_allow_html=True)  # 垂直居中
+            if st.button("❌", key=f"del_node_{i}"):
+                remove_node_indexes.append(i)
+        with st.expander(node_name, expanded=True):
             node["group"] = st.selectbox(
                 f"节点接收群组",
                 list({g for u in USER_DB.values() for g in u['groups']}),
@@ -57,7 +59,6 @@ def render_template_designer(current_user):
             # 字段并列排布，支持默认值
             remove_field_indexes = []
             for j, _ in enumerate(st.session_state[f"fields_{i}"]):
-                # 第一行：字段名称 + 必填 + 删除按钮
                 col1, col2, col3 = st.columns([3, 1, 1])
                 with col1:
                     fname = st.text_input(f"字段{j+1} 名称", key=f"fname_{i}_{j}")
@@ -67,7 +68,6 @@ def render_template_designer(current_user):
                     if st.button("删除字段", key=f"del_field_{i}_{j}"):
                         remove_field_indexes.append(j)
 
-                # 第二行：字段类型 + 默认值 + 可选项(仅select类型显示)
                 col4, col5, col6 = st.columns([2, 2, 3])
                 with col4:
                     ftype = st.selectbox(
@@ -91,13 +91,17 @@ def render_template_designer(current_user):
                     "options": options if ftype == "select" else ""
                 }
 
-            # 删除多余字段（倒序删防止索引混乱）
+            # 删除多余字段
             for idx in sorted(remove_field_indexes, reverse=True):
                 st.session_state[f"fields_{i}"].pop(idx)
 
             node["fields"] = st.session_state[f"fields_{i}"]
 
-    # 删除节点功能已完全移除！
+    # 删除节点（倒序）
+    for idx in sorted(remove_node_indexes, reverse=True):
+        st.session_state.node_data_list.pop(idx)
+        st.session_state.pop(f"fields_{idx}", None)
+        st.experimental_rerun()
 
     # 保存模板
     if st.button("保存模板"):
@@ -117,8 +121,8 @@ def render_template_designer(current_user):
                 template_id=t.id,
                 step_order=idx,
                 group=node['group'],
-                fields_json=json.dumps(node['fields']),
-                node_name=node['name']  # 若models.py未加此字段，请及时补充
+                fields_json=json.dumps(node['fields'])
+                # 不再保存 node_name
             )
             session.add(nt)
         session.commit()
