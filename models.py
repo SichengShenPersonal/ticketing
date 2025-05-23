@@ -16,8 +16,9 @@ class CustomField(Base):
     id = Column(Integer, primary_key=True)
     template_id = Column(Integer, ForeignKey('ticket_templates.id'))
     field_name = Column(String)
-    field_type = Column(String)  # text, number, select, etc.
+    field_type = Column(String)  # text, number, select, date, textarea, file
     is_required = Column(Boolean, default=False)
+    options_json = Column(Text)  # JSON string for select/radio options
 
 class WorkflowNode(Base):
     __tablename__ = 'workflow_nodes'
@@ -46,12 +47,3 @@ class TicketStep(Base):
     submitted_at = Column(DateTime)
     data = Column(JSON)
     status = Column(String)
-
-class CustomField(Base):
-    __tablename__ = 'custom_fields'
-    id = Column(Integer, primary_key=True)
-    template_id = Column(Integer, ForeignKey('ticket_templates.id'))
-    field_name = Column(String)
-    field_type = Column(String)  # text, number, select, date, textarea, file
-    is_required = Column(Boolean, default=False)
-    options_json = Column(Text)  # 例如 '["选项1", "选项2"]'
