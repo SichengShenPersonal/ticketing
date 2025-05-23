@@ -31,7 +31,7 @@ def render_template_designer(current_user):
             node_data.append({"step": i, "group": group, "fields": fields})
 
     if st.button("保存模板"):
-        t = TicketTemplate(name=template_name, description=description)
+        t = TicketTemplate(name=template_name, description=description, allowed_groups=",".join(allowed_groups))
         session.add(t)
         session.commit()
         for node in node_data:
