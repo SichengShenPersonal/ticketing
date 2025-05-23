@@ -5,7 +5,7 @@ from datetime import datetime
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from models import Base, TicketTemplate, CustomField, TicketInstance, TicketStep
+from models import Base, TicketTemplate, CustomField, TicketInstance, TicketStep, TicketNodeTemplate
 
 # SQLite 连接
 engine = create_engine("sqlite:///data/example.db")
@@ -32,32 +32,46 @@ with st.sidebar:
 
 # 展开式任务导航
 with st.sidebar.expander("📂 导航菜单", expanded=True):
-    menu = st.radio("功能选择", ["创建工单", "我的工单", "群组任务 - 所有", "群组任务 - 我的群组", "仪表盘"])
+    menu = st.radio("功能选择", ["创建工单", "我的工单", "群组任务 - 所有", "群组任务 - 我的群组", "设计工单模板", "仪表盘"])
 
-# ✅ 自动插入默认模板与字段
-if session.query(TicketTemplate).count() == 0:
-    template = TicketTemplate(name="新员工入职审批", description="标准入职流程")
-    session.add(template)
-    session.commit()
+if menu == "设计工单模板" and USER_DB[CURRENT_USER]['level'] == 'admin':
+    st.header("🛠️ 工单模板设计器（最多支持 8 个流程节点）")
+    template_name = st.text_input("模板名称")
+    description = st.text_area("模板描述")
+    allowed_groups = st.multiselect("谁可以发起这个工单？", ["ALL"] + list({g for u in USER_DB.values() for g in u['groups']}) )
 
-    fields = [
-        {"field_name": "员工姓名", "field_type": "text"},
-        {"field_name": "入职日期", "field_type": "date"},
-        {"field_name": "所属部门", "field_type": "select", "options": ["市场部", "技术部", "行政部"]}
-    ]
+    node_data = []
+    for i in range(8):
+        with st.expander(f"🧩 配置节点 node{i}", expanded=(i == 0)):
+            group = st.selectbox(f"Node{i} 接收群组", list({g for u in USER_DB.values() for g in u['groups']}), key=f"group_{i}")
+            field_count = st.number_input(f"Node{i} 字段数量", 0, 10, 1, key=f"fcount_{i}")
+            fields = []
+            for j in range(int(field_count)):
+                fname = st.text_input(f"字段{j+1} 名称", key=f"fname_{i}_{j}")
+                ftype = st.selectbox(f"字段{j+1} 类型", ["text", "number", "select", "date", "file", "textarea"], key=f"ftype_{i}_{j}")
+                is_required = st.checkbox(f"字段{j+1} 是否必填", value=True, key=f"freq_{i}_{j}")
+                options = ""
+                if ftype == "select":
+                    options = st.text_input(f"字段{j+1} 可选项（逗号分隔）", key=f"fopt_{i}_{j}")
+                fields.append({"field_name": fname, "field_type": ftype, "is_required": is_required, "options": options})
+            node_data.append({"step": i, "group": group, "fields": fields})
 
-    for f in fields:
-        field = CustomField(
-            template_id=template.id,
-            field_name=f["field_name"],
-            field_type=f["field_type"],
-            is_required=True,
-            options_json=json.dumps(f.get("options", []))
-        )
-        session.add(field)
-    session.commit()
+    if st.button("保存模板"):
+        t = TicketTemplate(name=template_name, description=description)
+        session.add(t)
+        session.commit()
+        for node in node_data:
+            nt = TicketNodeTemplate(
+                template_id=t.id,
+                step_order=node['step'],
+                group=node['group'],
+                fields_json=json.dumps(node['fields'])
+            )
+            session.add(nt)
+        session.commit()
+        st.success("✅ 模板保存成功！")
 
-if menu == "创建工单":
+elif menu == "创建工单":
     st.header("🎫 创建新工单")
 
     templates = session.query(TicketTemplate).all()
