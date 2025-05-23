@@ -8,10 +8,7 @@ from auth import USER_DB
 def render_create_ticket(current_user):
     st.header("🎫 创建新工单")
 
-    # 获取用户所属群组
     user_groups = set(USER_DB[current_user]['groups'])
-
-    # 只显示当前用户有权限发起的模板
     templates = [
         t for t in session.query(TicketTemplate).all()
         if not t.allowed_groups or user_groups.intersection(set(t.allowed_groups.split(',')))
@@ -28,6 +25,7 @@ def render_create_ticket(current_user):
     # 读取第一个节点（node0）的字段
     node_template = session.query(TicketNodeTemplate).filter_by(template_id=template_id, step_order=0).first()
     field_data = {}
+    error_flag = False
 
     if node_template:
         try:
@@ -35,36 +33,43 @@ def render_create_ticket(current_user):
         except Exception as e:
             st.error(f"模板字段解析出错: {e}")
             fields = []
+
         for field in fields:
             fname = field.get("field_name", "")
             ftype = field.get("field_type", "")
             is_required = field.get("is_required", False)
             options = field.get("options", "")
 
+            value = None
             if ftype == "text":
-                field_data[fname] = st.text_input(fname, value="")
+                value = st.text_input(fname)
             elif ftype == "number":
-                field_data[fname] = st.number_input(fname, value=0)
+                value = st.number_input(fname)
             elif ftype == "textarea":
-                field_data[fname] = st.text_area(fname, value="")
+                value = st.text_area(fname)
             elif ftype == "date":
-                field_data[fname] = st.date_input(fname)
+                value = st.date_input(fname)
             elif ftype == "select":
                 option_list = [opt.strip() for opt in options.split(",") if opt.strip()] if options else []
-                if not option_list:
-                    field_data[fname] = st.text_input(fname + "（请填写选项）", value="")
-                else:
-                    field_data[fname] = st.selectbox(fname, option_list)
+                value = st.selectbox(fname, option_list) if option_list else ""
             elif ftype == "file":
-                field_data[fname] = st.file_uploader(fname)
-            else:
-                field_data[fname] = st.text_input(fname + "（未知类型）", value="")
+                value = st.file_uploader(fname)
+
+            # 校验必填
+            if is_required and (value is None or value == "" or (ftype == "file" and value is None)):
+                st.error(f"{fname} 是必填项！")
+                error_flag = True
+
+            field_data[fname] = value
     else:
         st.warning("该模板还没有字段，请先在模板设计器中添加字段。")
         return
 
     if st.button("提交工单"):
-        # 保存工单实例
+        if error_flag:
+            st.error("请补全所有必填项后再提交！")
+            return
+
         ticket = TicketInstance(
             template_id=template_id,
             title=f"{template_name} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
@@ -75,7 +80,6 @@ def render_create_ticket(current_user):
         session.add(ticket)
         session.commit()
 
-        # 保存步骤（只保存第一个节点的填写数据）
         step = TicketStep(
             ticket_id=ticket.id,
             node_id=node_template.id if node_template else None,
