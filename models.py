@@ -9,6 +9,7 @@ class TicketTemplate(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String)
     description = Column(Text)
+    allowed_groups = Column(Text)  # 新增
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
 class CustomField(Base):
