@@ -18,7 +18,7 @@ class CustomField(Base):
     field_name = Column(String)
     field_type = Column(String)  # text, number, select, date, textarea, file
     is_required = Column(Boolean, default=False)
-    options_json = Column(Text)  # JSON string for select/radio options
+    options_json = Column(Text)
 
 class WorkflowNode(Base):
     __tablename__ = 'workflow_nodes'
@@ -42,8 +42,16 @@ class TicketStep(Base):
     __tablename__ = 'ticket_steps'
     id = Column(Integer, primary_key=True)
     ticket_id = Column(Integer, ForeignKey('ticket_instances.id'))
-    node_id = Column(Integer, ForeignKey('workflow_nodes.id'))
+    node_id = Column(Integer, ForeignKey('workflow_nodes.id'), nullable=True)
     assigned_to = Column(String)
     submitted_at = Column(DateTime)
     data = Column(JSON)
     status = Column(String)
+
+class TicketNodeTemplate(Base):
+    __tablename__ = 'ticket_node_templates'
+    id = Column(Integer, primary_key=True)
+    template_id = Column(Integer, ForeignKey('ticket_templates.id'))
+    step_order = Column(Integer)  # node0 ~ node7
+    group = Column(String)  # 接收群组
+    fields_json = Column(Text)  # json.dumps(fields_list)
