@@ -30,7 +30,9 @@ with st.sidebar:
     st.write(f"权限等级: `{USER_DB[CURRENT_USER]['level']}`")
     st.write(f"所属群组: {', '.join(USER_DB[CURRENT_USER]['groups'])}")
 
-menu = st.sidebar.radio("导航", ["创建工单", "我的工单", "群组任务", "仪表盘"])
+# 展开式任务导航
+with st.sidebar.expander("📂 导航菜单", expanded=True):
+    menu = st.radio("功能选择", ["创建工单", "我的工单", "群组任务 - 所有", "群组任务 - 我的群组", "仪表盘"])
 
 # ✅ 自动插入默认模板与字段
 if session.query(TicketTemplate).count() == 0:
@@ -129,8 +131,8 @@ elif menu == "我的工单":
             })
         st.dataframe(pd.DataFrame(data))
 
-elif menu == "群组任务":
-    st.header("👥 所属群组工单")
+elif menu == "群组任务 - 我的群组":
+    st.header("👥 我的群组工单")
 
     tickets = session.query(TicketInstance).all()
     visible = []
@@ -148,6 +150,24 @@ elif menu == "群组任务":
     else:
         data = []
         for t in visible:
+            data.append({
+                "工单编号": f"TKT-{t.id:04d}",
+                "标题": t.title,
+                "状态": t.status,
+                "提交人": t.created_by,
+                "提交时间": t.created_at.strftime("%Y-%m-%d %H:%M:%S")
+            })
+        st.dataframe(pd.DataFrame(data))
+
+elif menu == "群组任务 - 所有":
+    st.header("📂 所有工单总览")
+
+    tickets = session.query(TicketInstance).all()
+    if not tickets:
+        st.info("暂无任何工单记录")
+    else:
+        data = []
+        for t in tickets:
             data.append({
                 "工单编号": f"TKT-{t.id:04d}",
                 "标题": t.title,
