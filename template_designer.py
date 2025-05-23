@@ -42,25 +42,40 @@ def render_template_designer(current_user):
             if st.button(f"➕ 节点{i+1}新增字段", key=f"add_field_{i}"):
                 st.session_state[f"fields_{i}"].append({})
 
-            # 展示所有字段
+            # 展示所有字段（用columns并列布局）
             for j, _ in enumerate(st.session_state[f"fields_{i}"]):
-                with st.container():
+                cols = st.columns([2, 1, 1, 2, 2])  # 名称/必填 | 类型 | 默认值 | 选项 | 删除按钮
+                with cols[0]:
                     fname = st.text_input(f"字段{j+1} 名称", key=f"fname_{i}_{j}")
+                with cols[1]:
+                    is_required = st.checkbox("必填", value=True, key=f"freq_{i}_{j}")
+                with cols[2]:
                     ftype = st.selectbox(
-                        f"字段{j+1} 类型",
+                        "类型",
                         ["text", "number", "select", "date", "file", "textarea"],
                         key=f"ftype_{i}_{j}"
                     )
-                    is_required = st.checkbox("必填", value=True, key=f"freq_{i}_{j}")
+                with cols[3]:
+                    default_value = st.text_input("默认值", key=f"fdefault_{i}_{j}")
+                with cols[4]:
                     options = ""
                     if ftype == "select":
-                        options = st.text_input("可选项（用逗号分隔）", key=f"fopt_{i}_{j}")
-                    st.session_state[f"fields_{i}"][j] = {
-                        "field_name": fname,
-                        "field_type": ftype,
-                        "is_required": is_required,
-                        "options": options
-                    }
+                        options = st.text_input("可选项(逗号分隔)", key=f"fopt_{i}_{j}")
+
+                # 保存字段数据
+                st.session_state[f"fields_{i}"][j] = {
+                    "field_name": fname,
+                    "field_type": ftype,
+                    "is_required": is_required,
+                    "default_value": default_value,
+                    "options": options if ftype == "select" else ""
+                }
+
+                # 删除字段按钮
+                if st.button("删除字段", key=f"del_field_{i}_{j}"):
+                    st.session_state[f"fields_{i}"].pop(j)
+                    st.experimental_rerun()
+
             node["fields"] = st.session_state[f"fields_{i}"]
 
         # 删除节点按钮
