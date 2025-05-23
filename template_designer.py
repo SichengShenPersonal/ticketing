@@ -32,20 +32,13 @@ def render_template_designer(current_user):
         })
 
     # 展示所有节点
-    remove_node_indexes = []
     for i, node in enumerate(st.session_state.node_data_list):
-        # 节点名称和删除按钮同行显示
-        node_col1, node_col2 = st.columns([6, 1])
-        with node_col1:
-            node['name'] = st.text_input(
-                "节点名称",
-                value=node.get('name', f"节点{i+1}"),
-                key=f"node_name_{i}"
-            )
-        with node_col2:
-            st.markdown("<br>", unsafe_allow_html=True)  # 保证按钮垂直居中
-            if st.button("❌", key=f"del_node_{i}"):
-                remove_node_indexes.append(i)
+        # 只显示节点名称输入框，不再有删除按钮
+        node['name'] = st.text_input(
+            "节点名称",
+            value=node.get('name', f"节点{i+1}"),
+            key=f"node_name_{i}"
+        )
         with st.expander(node['name'], expanded=True):
             node["group"] = st.selectbox(
                 f"节点接收群组",
@@ -104,11 +97,7 @@ def render_template_designer(current_user):
 
             node["fields"] = st.session_state[f"fields_{i}"]
 
-    # 删除多余节点（倒序删防止索引混乱）
-    for idx in sorted(remove_node_indexes, reverse=True):
-        st.session_state.node_data_list.pop(idx)
-        st.session_state.pop(f"fields_{idx}", None)
-        st.experimental_rerun()
+    # 删除节点功能已完全移除！
 
     # 保存模板
     if st.button("保存模板"):
@@ -129,7 +118,7 @@ def render_template_designer(current_user):
                 step_order=idx,
                 group=node['group'],
                 fields_json=json.dumps(node['fields']),
-                node_name=node['name']
+                node_name=node['name']  # 若models.py未加此字段，请及时补充
             )
             session.add(nt)
         session.commit()
