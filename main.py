@@ -13,6 +13,29 @@ Session = sessionmaker(bind=engine)
 session = Session()
 Base.metadata.create_all(engine)
 
+# ✅ 自动插入默认模板与字段
+if session.query(TicketTemplate).count() == 0:
+    template = TicketTemplate(name="新员工入职审批", description="标准入职流程")
+    session.add(template)
+    session.commit()
+
+    fields = [
+        {"field_name": "员工姓名", "field_type": "text"},
+        {"field_name": "入职日期", "field_type": "date"},
+        {"field_name": "所属部门", "field_type": "select", "options": ["市场部", "技术部", "行政部"]}
+    ]
+
+    for f in fields:
+        field = CustomField(
+            template_id=template.id,
+            field_name=f["field_name"],
+            field_type=f["field_type"],
+            is_required=True,
+            options_json=json.dumps(f.get("options", []))
+        )
+        session.add(field)
+    session.commit()
+
 # 页面初始化
 st.set_page_config(page_title="FlowTick 工单系统", layout="wide")
 st.title("📌 FlowTick 智能工单系统")
@@ -54,7 +77,6 @@ if menu == "创建工单":
                 field_data[fname] = st.file_uploader(fname)
 
         if st.button("提交工单"):
-            # 写入主工单信息
             ticket = TicketInstance(
                 template_id=template_id,
                 title=f"{template_name} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
@@ -65,7 +87,6 @@ if menu == "创建工单":
             session.add(ticket)
             session.commit()
 
-            # 写入第一步信息（模拟一个节点）
             step = TicketStep(
                 ticket_id=ticket.id,
                 node_id=None,
