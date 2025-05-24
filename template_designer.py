@@ -34,11 +34,10 @@ def render_template_designer(current_user):
     remove_node_indexes = []
     for i, node in enumerate(st.session_state.node_data_list):
         node_name = f"节点{i+1}"
-        node_col1, node_col2 = st.columns([6, 1])
-        with node_col1:
-            st.markdown(f"**{node_name}**")
-        with node_col2:
-            st.markdown("<br>", unsafe_allow_html=True)  # 垂直居中
+        col_left, col_right = st.columns([20, 1])  # 左宽右窄
+        with col_left:
+            st.markdown(f"**{node_name}**", unsafe_allow_html=True)
+        with col_right:
             if st.button("❌", key=f"del_node_{i}"):
                 remove_node_indexes.append(i)
         with st.expander(node_name, expanded=True):
