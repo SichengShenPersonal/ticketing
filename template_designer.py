@@ -18,7 +18,7 @@ def render_template_designer(current_user):
         ["ALL"] + list({g for u in USER_DB.values() for g in u['groups']})
     )
 
-    # 动态节点列表
+    # 初始化节点列表
     if "node_data_list" not in st.session_state:
         st.session_state.node_data_list = []
 
@@ -29,18 +29,20 @@ def render_template_designer(current_user):
             "fields": []
         })
 
-    # 展示所有节点，并允许删除
+    # 展示节点及其操作
     remove_node_indexes = []
     for i, node in enumerate(st.session_state.node_data_list):
         node_name = f"节点{i+1}"
-        # 顶部一行：节点名左，删除按钮右，且只显示一次节点名
-        cols = st.columns([20, 1])
-        with cols[0]:
-            st.markdown(f"<span style='font-weight:bold;font-size:18px'>{node_name}</span>", unsafe_allow_html=True)
-        with cols[1]:
+
+        # 用两列让删除按钮和展开栏标题同行且右对齐，expander标题只显示节点名
+        col1, col2 = st.columns([20, 1])
+        with col1:
+            expander = st.expander(node_name, expanded=True)
+        with col2:
+            # 让按钮和expander标题同行右侧
             if st.button("❌", key=f"del_node_{i}"):
                 remove_node_indexes.append(i)
-        with st.expander("", expanded=True):  # 展开栏标题为空，只在上方显示节点名
+        with expander:
             node["group"] = st.selectbox(
                 "节点接收群组",
                 list({g for u in USER_DB.values() for g in u['groups']}),
@@ -55,7 +57,7 @@ def render_template_designer(current_user):
             if st.button(f"➕ 新增字段", key=f"add_field_{i}"):
                 st.session_state[f"fields_{i}"].append({})
 
-            # 字段并列排布，支持默认值
+            # 字段操作
             remove_field_indexes = []
             for j, _ in enumerate(st.session_state[f"fields_{i}"]):
                 col1, col2, col3 = st.columns([3, 1, 1])
@@ -81,7 +83,6 @@ def render_template_designer(current_user):
                     if ftype == "select":
                         options = st.text_input("可选项(用逗号分隔)", key=f"fopt_{i}_{j}")
 
-                # 保存字段
                 st.session_state[f"fields_{i}"][j] = {
                     "field_name": fname,
                     "field_type": ftype,
@@ -90,17 +91,17 @@ def render_template_designer(current_user):
                     "options": options if ftype == "select" else ""
                 }
 
-            # 删除多余字段（倒序删防止索引混乱）
+            # 删除字段（倒序防冲突）
             for idx in sorted(remove_field_indexes, reverse=True):
                 st.session_state[f"fields_{i}"].pop(idx)
 
             node["fields"] = st.session_state[f"fields_{i}"]
 
-    # 删除节点（倒序删防止索引错乱）
+    # 删除节点（倒序防止索引混乱）
     if remove_node_indexes:
         for idx in sorted(remove_node_indexes, reverse=True):
             st.session_state.node_data_list.pop(idx)
-            # 清理字段 state
+            # 清理相关字段session
             if f"fields_{idx}" in st.session_state:
                 st.session_state.pop(f"fields_{idx}")
         st.experimental_rerun()
