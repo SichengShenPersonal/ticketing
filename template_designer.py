@@ -24,7 +24,6 @@ def render_template_designer(current_user):
 
     # 新增节点按钮
     if st.button("➕ 新增节点"):
-        node_count = len(st.session_state.node_data_list) + 1
         st.session_state.node_data_list.append({
             "group": "",
             "fields": []
@@ -34,16 +33,16 @@ def render_template_designer(current_user):
     remove_node_indexes = []
     for i, node in enumerate(st.session_state.node_data_list):
         node_name = f"节点{i+1}"
-        col1, col2 = st.columns([20, 1])
-        with col1:
-            expander = st.expander(node_name, expanded=True)
-        with col2:
-            # 按钮和expander同行且最右
+        # 顶部一行：节点名左，删除按钮右，且只显示一次节点名
+        cols = st.columns([20, 1])
+        with cols[0]:
+            st.markdown(f"<span style='font-weight:bold;font-size:18px'>{node_name}</span>", unsafe_allow_html=True)
+        with cols[1]:
             if st.button("❌", key=f"del_node_{i}"):
                 remove_node_indexes.append(i)
-        with expander:
+        with st.expander("", expanded=True):  # 展开栏标题为空，只在上方显示节点名
             node["group"] = st.selectbox(
-                f"节点接收群组",
+                "节点接收群组",
                 list({g for u in USER_DB.values() for g in u['groups']}),
                 key=f"group_{i}"
             )
@@ -91,16 +90,19 @@ def render_template_designer(current_user):
                     "options": options if ftype == "select" else ""
                 }
 
-            # 删除多余字段
+            # 删除多余字段（倒序删防止索引混乱）
             for idx in sorted(remove_field_indexes, reverse=True):
                 st.session_state[f"fields_{i}"].pop(idx)
 
             node["fields"] = st.session_state[f"fields_{i}"]
 
-    # 删除节点（倒序）
-    for idx in sorted(remove_node_indexes, reverse=True):
-        st.session_state.node_data_list.pop(idx)
-        st.session_state.pop(f"fields_{idx}", None)
+    # 删除节点（倒序删防止索引错乱）
+    if remove_node_indexes:
+        for idx in sorted(remove_node_indexes, reverse=True):
+            st.session_state.node_data_list.pop(idx)
+            # 清理字段 state
+            if f"fields_{idx}" in st.session_state:
+                st.session_state.pop(f"fields_{idx}")
         st.experimental_rerun()
 
     # 保存模板
@@ -122,7 +124,6 @@ def render_template_designer(current_user):
                 step_order=idx,
                 group=node['group'],
                 fields_json=json.dumps(node['fields'])
-                # 不再保存 node_name
             )
             session.add(nt)
         session.commit()
