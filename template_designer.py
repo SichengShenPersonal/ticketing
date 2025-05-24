@@ -44,7 +44,7 @@ def render_template_designer(current_user):
                 remove_node_indexes.append(i)
         with expander:
             node["group"] = st.selectbox(
-                "节点接收群组",
+                "接收群组",
                 list({g for u in USER_DB.values() for g in u['groups']}),
                 key=f"group_{i}"
             )
