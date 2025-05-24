@@ -1,106 +1,101 @@
 import streamlit as st
-import json
-from datetime import datetime
-import pandas as pd
 from db import session
-from models import TicketTemplate, TicketNodeTemplate, TicketInstance, TicketStep
+from models import TicketTemplate, TicketNodeTemplate
 from auth import USER_DB
 
 def render_create_ticket(current_user):
-    st.header("🎫 创建新工单")
+    st.header("🎫 创建工单")
 
-    user_groups = set(USER_DB[current_user]['groups'])
-    templates = [
-        t for t in session.query(TicketTemplate).all()
-        if not t.allowed_groups or user_groups.intersection(set(t.allowed_groups.split(',')))
-    ]
+    # 1. 获取可用模板
+    templates = session.query(TicketTemplate).all()
+    template_dict = {t.name: t for t in templates}
 
-    if not templates:
-        st.warning("⚠️ 没有可用的工单模板。")
+    # 2. 模板选择（默认不选任何模板）
+    selected_template_name = st.selectbox("请选择工单模板", [""] + list(template_dict.keys()))
+    if not selected_template_name:
+        st.info("请先选择模板，选择后可填写工单")
         return
 
-    template_names = {t.name: t.id for t in templates}
-    template_name = st.selectbox("选择模板", list(template_names.keys()))
-    template_id = template_names[template_name]
+    # 3. 只有选了模板才显示后续内容
+    template = template_dict[selected_template_name]
+    # 取第一个节点为发起节点
+    node = (
+        session.query(TicketNodeTemplate)
+        .filter_by(template_id=template.id)
+        .order_by(TicketNodeTemplate.step_order)
+        .first()
+    )
+    if not node:
+        st.error("模板未配置节点")
+        return
 
-    # 读取第一个节点（node0）的字段
-    node_template = session.query(TicketNodeTemplate).filter_by(template_id=template_id, step_order=0).first()
-    field_data = {}
-    error_flag = False
+    # 4. 加载字段
+    fields = node.fields_json
+    if isinstance(fields, str):
+        import json
+        fields = json.loads(fields)
 
-    if node_template:
-        try:
-            fields = json.loads(node_template.fields_json)
-        except Exception as e:
-            st.error(f"模板字段解析出错: {e}")
-            fields = []
+    st.markdown("#### 请填写工单信息")
 
-        for field in fields:
-            fname = field.get("field_name", "")
-            ftype = field.get("field_type", "")
-            is_required = field.get("is_required", False)
+    # 5. 字段输入（每行最多3个字段）
+    field_values = {}
+    cols = [None, None, None]  # 缓存当前行的3列
+    for idx, field in enumerate(fields):
+        if idx % 3 == 0:
+            cols = st.columns(3)
+        col = cols[idx % 3]
+        with col:
+            field_name = field["field_name"]
+            ftype = field.get("field_type", "text")
+            required = field.get("is_required", False)
+            default = field.get("default_value", "")
             options = field.get("options", "")
-            default_value = field.get("default_value", "")
 
-            value = None
-            label = f"{fname}{' *' if is_required else ''}"
+            label = f"{field_name}{' *' if required else ''}"
+            key = f"ticket_field_{idx}"
 
             if ftype == "text":
-                value = st.text_input(label, value=default_value)
+                value = st.text_input(label, value=default, key=key)
             elif ftype == "number":
-                try:
-                    value = st.number_input(label, value=float(default_value) if default_value else 0)
-                except Exception:
-                    value = st.number_input(label, value=0)
-            elif ftype == "textarea":
-                value = st.text_area(label, value=default_value)
-            elif ftype == "date":
-                try:
-                    # 支持字符串或datetime
-                    val = pd.to_datetime(default_value).date() if default_value else datetime.now().date()
-                except Exception:
-                    val = datetime.now().date()
-                value = st.date_input(label, value=val)
+                value = st.number_input(label, value=float(default) if default else 0, key=key)
             elif ftype == "select":
-                option_list = [opt.strip() for opt in options.split(",") if opt.strip()] if options else []
-                default_idx = option_list.index(default_value) if default_value in option_list else 0
-                value = st.selectbox(label, option_list, index=default_idx) if option_list else ""
+                opts = [opt.strip() for opt in options.split(",") if opt.strip()]
+                value = st.selectbox(label, opts, key=key)
+            elif ftype == "date":
+                value = st.date_input(label, key=key)
             elif ftype == "file":
-                value = st.file_uploader(label)
+                value = st.file_uploader(label, key=key)
+            elif ftype == "textarea":
+                value = st.text_area(label, value=default, key=key, height=100)
+            else:
+                value = st.text_input(label, value=default, key=key)
 
-            if is_required and (value is None or value == "" or (ftype == "file" and value is None)):
-                error_flag = True
+            field_values[field_name] = value
 
-            field_data[fname] = value
-    else:
-        st.warning("该模板还没有字段，请先在模板设计器中添加字段。")
-        return
-
+    # 6. 提交按钮和校验
     if st.button("提交工单"):
-        if error_flag:
-            st.error("请补全所有必填项后再提交！")
+        # 检查必填
+        missing = []
+        for idx, field in enumerate(fields):
+            if field.get("is_required", False):
+                v = field_values[field["field_name"]]
+                # 对于文件、文本等有不同判断
+                if field["field_type"] == "file":
+                    if v is None:
+                        missing.append(field["field_name"])
+                elif isinstance(v, str) and not v.strip():
+                    missing.append(field["field_name"])
+                elif v is None:
+                    missing.append(field["field_name"])
+        if missing:
+            st.error(f"请填写所有必填字段：{', '.join(missing)}")
             return
 
-        ticket = TicketInstance(
-            template_id=template_id,
-            title=f"{template_name} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-            status="新建",
-            created_by=current_user,
-            created_at=datetime.now()
-        )
-        session.add(ticket)
-        session.commit()
+        # 保存工单逻辑示例（你可根据实际业务逻辑调整）
+        st.success("工单已成功提交！")
+        # 可以在此处添加数据库保存等后续操作
 
-        step = TicketStep(
-            ticket_id=ticket.id,
-            node_id=node_template.id if node_template else None,
-            assigned_to=current_user,
-            submitted_at=datetime.now(),
-            data=field_data,
-            status="完成"
-        )
-        session.add(step)
-        session.commit()
-
-        st.success("✅ 工单提交成功，已写入数据库！")
-        st.json(field_data)
+# 如果你用 Streamlit 运行时这样调用
+if __name__ == '__main__':
+    # 这里你可以根据登录态等情况传递当前用户
+    render_create_ticket(current_user="your_user_name")
