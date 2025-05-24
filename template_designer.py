@@ -34,13 +34,14 @@ def render_template_designer(current_user):
     remove_node_indexes = []
     for i, node in enumerate(st.session_state.node_data_list):
         node_name = f"节点{i+1}"
-        col_left, col_right = st.columns([20, 1])  # 左宽右窄
-        with col_left:
-            st.markdown(f"**{node_name}**", unsafe_allow_html=True)
-        with col_right:
+        col1, col2 = st.columns([20, 1])
+        with col1:
+            expander = st.expander(node_name, expanded=True)
+        with col2:
+            # 按钮和expander同行且最右
             if st.button("❌", key=f"del_node_{i}"):
                 remove_node_indexes.append(i)
-        with st.expander(node_name, expanded=True):
+        with expander:
             node["group"] = st.selectbox(
                 f"节点接收群组",
                 list({g for u in USER_DB.values() for g in u['groups']}),
